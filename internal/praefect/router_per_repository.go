@@ -7,6 +7,7 @@ import (
 
 	"gitlab.com/gitlab-org/gitaly/v14/internal/praefect/datastore"
 	"gitlab.com/gitlab-org/gitaly/v14/internal/praefect/nodes"
+	"gitlab.com/gitlab-org/gitaly/v14/internal/praefect/praefectutil"
 	"google.golang.org/grpc"
 )
 
@@ -300,7 +301,7 @@ func (r *PerRepositoryRouter) RouteRepositoryCreation(ctx context.Context, virtu
 	if replicationFactor == 1 {
 		return RepositoryMutatorRoute{
 			RepositoryID: id,
-			ReplicaPath:  relativePath,
+			ReplicaPath:  praefectutil.DeriveReplicaPath(id),
 			Primary:      primary,
 		}, nil
 	}
@@ -349,7 +350,7 @@ func (r *PerRepositoryRouter) RouteRepositoryCreation(ctx context.Context, virtu
 
 	return RepositoryMutatorRoute{
 		RepositoryID:       id,
-		ReplicaPath:        relativePath,
+		ReplicaPath:        praefectutil.DeriveReplicaPath(id),
 		Primary:            primary,
 		Secondaries:        secondaries,
 		ReplicationTargets: replicationTargets,
