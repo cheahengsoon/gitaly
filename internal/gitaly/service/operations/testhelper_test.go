@@ -75,7 +75,6 @@ func runOperationServiceServer(t testing.TB, cfg config.Cfg, options ...testserv
 			deps.GetGitCmdFactory(),
 			deps.GetCatfileCache(),
 		)
-		operationServer.enableUserMergeBranchStructuredErrors = true
 
 		gitalypb.RegisterOperationServiceServer(srv, operationServer)
 		gitalypb.RegisterHookServiceServer(srv, hook.NewServer(cfg, deps.GetHookManager(), deps.GetGitCmdFactory(), deps.GetPackObjectsCache()))
