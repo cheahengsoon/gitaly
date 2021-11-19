@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"path/filepath"
 	"testing"
 	"time"
@@ -160,16 +159,9 @@ func TestAddRepository_Exec(t *testing.T) {
 
 				relativePath := fmt.Sprintf("path/to/test/repo_%s", tn)
 				repoDS := datastore.NewPostgresRepositoryStore(db, conf.StorageNames())
-
-				rmRepoCmd := &removeRepository{
-					logger:         logger,
-					virtualStorage: virtualStorageName,
-					relativePath:   relativePath,
-					w:              io.Discard,
-					apply:          true,
-				}
-
-				require.NoError(t, rmRepoCmd.Exec(flag.NewFlagSet("", flag.PanicOnError), conf))
+				exists, err := repoDS.RepositoryExists(ctx, virtualStorageName, relativePath)
+				require.NoError(t, err)
+				require.False(t, exists)
 
 				// create the repo on Gitaly without Praefect knowing
 				require.NoError(t, createRepoThroughGitaly1(relativePath))
@@ -195,7 +187,7 @@ func TestAddRepository_Exec(t *testing.T) {
 				assert.Contains(t, assignments, g1Cfg.Storages[0].Name)
 				assert.Contains(t, assignments, g2Cfg.Storages[0].Name)
 
-				exists, err := repoDS.RepositoryExists(ctx, virtualStorageName, relativePath)
+				exists, err = repoDS.RepositoryExists(ctx, virtualStorageName, relativePath)
 				require.NoError(t, err)
 				assert.True(t, exists)
 			})

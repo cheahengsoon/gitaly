@@ -2,16 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"flag"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
-	"github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gitlab.com/gitlab-org/gitaly/v14/client"
@@ -105,6 +104,15 @@ func TestRemoveRepository_Exec(t *testing.T) {
 		assert.NoError(t, run(starterConfigs, conf, bootstrapper, prometheus.NewRegistry(), prometheus.NewRegistry()))
 	}()
 
+	rs := datastore.NewPostgresRepositoryStore(db, conf.StorageNames())
+	getReplicaPath := func(ctx context.Context, t testing.TB, repo *gitalypb.Repository) string {
+		repositoryID, err := rs.GetRepositoryID(ctx, repo.StorageName, repo.RelativePath)
+		require.NoError(t, err)
+		replicaPath, err := rs.GetReplicaPath(ctx, repositoryID)
+		require.NoError(t, err)
+		return replicaPath
+	}
+
 	cc, err := client.Dial("unix://"+conf.SocketPath, nil)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cc.Close()) }()
@@ -118,6 +126,8 @@ func TestRemoveRepository_Exec(t *testing.T) {
 	t.Run("dry run", func(t *testing.T) {
 		var out bytes.Buffer
 		repo := createRepo(t, ctx, repoClient, praefectStorage, t.Name())
+		replicaPath := getReplicaPath(ctx, t, repo)
+
 		cmd := &removeRepository{
 			logger:         testhelper.NewDiscardingLogger(t),
 			virtualStorage: repo.StorageName,
@@ -128,10 +138,9 @@ func TestRemoveRepository_Exec(t *testing.T) {
 		}
 		require.NoError(t, cmd.Exec(flag.NewFlagSet("", flag.PanicOnError), conf))
 
-		require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, repo.RelativePath))
-		require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, repo.RelativePath))
+		require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
+		require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
 		assert.Contains(t, out.String(), "Repository found in the database.\n")
-		assert.Contains(t, out.String(), "Repository found on the following gitaly nodes:")
 		assert.Contains(t, out.String(), "Re-run the command with -apply to remove repositories from the database and disk.\n")
 
 		repositoryRowExists, err := datastore.NewPostgresRepositoryStore(db, nil).RepositoryExists(ctx, cmd.virtualStorage, cmd.relativePath)
@@ -155,9 +164,7 @@ func TestRemoveRepository_Exec(t *testing.T) {
 		require.NoDirExists(t, filepath.Join(g1Cfg.Storages[0].Path, repo.RelativePath))
 		require.NoDirExists(t, filepath.Join(g2Cfg.Storages[0].Path, repo.RelativePath))
 		assert.Contains(t, out.String(), "Repository found in the database.\n")
-		assert.Contains(t, out.String(), "Repository found on the following gitaly nodes:")
 		assert.Contains(t, out.String(), fmt.Sprintf("Attempting to remove %s from the database, and delete it from all gitaly nodes...\n", repo.RelativePath))
-		assert.Contains(t, out.String(), fmt.Sprintf("Successfully removed %s from", repo.RelativePath))
 
 		var repositoryRowExists bool
 		require.NoError(t, db.QueryRow(
@@ -170,8 +177,10 @@ func TestRemoveRepository_Exec(t *testing.T) {
 	t.Run("no info about repository on praefect", func(t *testing.T) {
 		var out bytes.Buffer
 		repo := createRepo(t, ctx, repoClient, praefectStorage, t.Name())
+		replicaPath := getReplicaPath(ctx, t, repo)
+
 		repoStore := datastore.NewPostgresRepositoryStore(db.DB, nil)
-		_, _, err := repoStore.DeleteRepository(ctx, repo.StorageName, repo.RelativePath)
+		_, _, err = repoStore.DeleteRepository(ctx, repo.StorageName, repo.RelativePath)
 		require.NoError(t, err)
 
 		cmd := &removeRepository{
@@ -184,10 +193,8 @@ func TestRemoveRepository_Exec(t *testing.T) {
 		}
 		require.NoError(t, cmd.Exec(flag.NewFlagSet("", flag.PanicOnError), conf))
 		assert.Contains(t, out.String(), "Repository is not being tracked in Praefect.\n")
-		assert.Contains(t, out.String(), "Repository found on the following gitaly nodes:")
-		assert.Contains(t, out.String(), "The database has no information about this repository.\n")
-		require.NoDirExists(t, filepath.Join(g1Cfg.Storages[0].Path, repo.RelativePath))
-		require.NoDirExists(t, filepath.Join(g2Cfg.Storages[0].Path, repo.RelativePath))
+		require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
+		require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
 
 		requireNoDatabaseInfo(t, db, cmd)
 	})
@@ -197,10 +204,12 @@ func TestRemoveRepository_Exec(t *testing.T) {
 		repo := createRepo(t, ctx, repoClient, praefectStorage, t.Name())
 		g2Srv.Shutdown()
 
-		logger := testhelper.NewDiscardingLogger(t)
-		loggerHook := test.NewLocal(logger)
+		replicaPath := getReplicaPath(ctx, t, repo)
+		require.DirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
+		require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
+
 		cmd := &removeRepository{
-			logger:         logrus.NewEntry(logger),
+			logger:         logrus.NewEntry(testhelper.NewDiscardingLogger(t)),
 			virtualStorage: praefectStorage,
 			relativePath:   repo.RelativePath,
 			dialTimeout:    100 * time.Millisecond,
@@ -210,21 +219,8 @@ func TestRemoveRepository_Exec(t *testing.T) {
 
 		require.NoError(t, cmd.Exec(flag.NewFlagSet("", flag.PanicOnError), conf))
 
-		var checkExistsOnNodeErrFound, removeRepoFromDiskErrFound bool
-		for _, entry := range loggerHook.AllEntries() {
-			if strings.Contains(entry.Message, `checking if repository exists on "gitaly-2"`) {
-				checkExistsOnNodeErrFound = true
-			}
-
-			if strings.Contains(entry.Message, `repository removal failed for "gitaly-2"`) {
-				removeRepoFromDiskErrFound = true
-			}
-		}
-		require.True(t, checkExistsOnNodeErrFound)
-		require.True(t, removeRepoFromDiskErrFound)
-
-		require.NoDirExists(t, filepath.Join(g1Cfg.Storages[0].Path, repo.RelativePath))
-		require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, repo.RelativePath))
+		require.NoDirExists(t, filepath.Join(g1Cfg.Storages[0].Path, replicaPath))
+		require.DirExists(t, filepath.Join(g2Cfg.Storages[0].Path, replicaPath))
 
 		requireNoDatabaseInfo(t, db, cmd)
 	})
