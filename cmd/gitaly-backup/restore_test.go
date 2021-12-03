@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gitlab.com/gitlab-org/gitaly/v14/client"
 	"gitlab.com/gitlab-org/gitaly/v14/internal/git/gittest"
 	"gitlab.com/gitlab-org/gitaly/v14/internal/gitaly/service/setup"
 	"gitlab.com/gitlab-org/gitaly/v14/internal/testhelper"
@@ -70,8 +71,15 @@ func TestRestoreSubcommand(t *testing.T) {
 		cmd.Run(context.Background(), &stdin, io.Discard),
 		"restore: pipeline: 1 failures encountered:\n - invalid: manager: remove repository: could not dial source: invalid connection string: \"invalid\"\n")
 
+	ctx, cancel := testhelper.Context()
+	defer cancel()
+
+	cc, err := client.DialContext(ctx, gitalyAddr, nil)
+	require.NoError(t, err)
+	defer cc.Close()
+
 	for _, repo := range repos {
-		repoPath := filepath.Join(cfg.Storages[0].Path, repo.RelativePath)
+		repoPath := filepath.Join(cfg.Storages[0].Path, testhelper.GetReplicaPath(ctx, t, cc, repo))
 		bundlePath := filepath.Join(path, repo.RelativePath+".bundle")
 
 		output := gittest.Exec(t, cfg, "-C", repoPath, "bundle", "verify", bundlePath)
