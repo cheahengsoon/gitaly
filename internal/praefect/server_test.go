@@ -167,7 +167,7 @@ func TestGitalyServerInfo(t *testing.T) {
 		})
 		t.Cleanup(cleanup)
 
-		gitVersion, err := git.CurrentVersion(ctx, git.NewExecCommandFactory(firstCfg))
+		gitVersion, err := git.NewExecCommandFactory(firstCfg).GitVersion(ctx)
 		require.NoError(t, err)
 
 		expected := &gitalypb.ServerInfoResponse{

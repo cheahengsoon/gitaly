@@ -80,3 +80,8 @@ func (f *InterceptingCommandFactory) GetExecutionEnvironment(ctx context.Context
 	execEnv.BinaryPath = f.interceptingCommandFactory.GetExecutionEnvironment(ctx).BinaryPath
 	return execEnv
 }
+
+// GitVersion returns the real Git version.
+func (f *InterceptingCommandFactory) GitVersion(ctx context.Context) (git.Version, error) {
+	return f.realCommandFactory.GitVersion(ctx)
+}

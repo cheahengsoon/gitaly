@@ -50,6 +50,8 @@ type CommandFactory interface {
 	NewWithDir(ctx context.Context, dir string, sc Cmd, opts ...CmdOpt) (*command.Command, error)
 	// GetExecutionEnvironment returns parameters required to execute Git commands.
 	GetExecutionEnvironment(context.Context) ExecutionEnvironment
+	// GitVersion returns the Git version used by the command factory.
+	GitVersion(context.Context) (Version, error)
 }
 
 // ExecCommandFactory knows how to properly construct different types of commands.
@@ -114,6 +116,18 @@ func (cf *ExecCommandFactory) GetExecutionEnvironment(context.Context) Execution
 		BinaryPath:           cf.cfg.Git.BinPath,
 		EnvironmentVariables: cf.cfg.GitExecEnv(),
 	}
+}
+
+// GitVersion returns the Git version in use.
+func (cf *ExecCommandFactory) GitVersion(ctx context.Context) (Version, error) {
+	cmd, err := cf.NewWithoutRepo(ctx, SubCmd{
+		Name: "version",
+	})
+	if err != nil {
+		return Version{}, fmt.Errorf("spawning version command: %w", err)
+	}
+
+	return parseVersionFromCommand(cmd)
 }
 
 // newCommand creates a new command.Command for the given git command. If a repo is given, then the

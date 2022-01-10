@@ -71,7 +71,7 @@ func New(ctx context.Context, conf config.Cfg, repo git.RepositoryExecutor, opts
 		return nil, err
 	}
 
-	gitVersion, err := git.CurrentVersionForExecutor(ctx, repo)
+	gitVersion, err := repo.GitVersion(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("determining git version: %w", err)
 	}

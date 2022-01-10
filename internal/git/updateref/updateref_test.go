@@ -296,7 +296,7 @@ func TestUpdater_capturesStderr(t *testing.T) {
 }
 
 func gitSupportsStatusFlushing(t *testing.T, ctx context.Context, cfg config.Cfg) bool {
-	version, err := git.CurrentVersion(ctx, git.NewExecCommandFactory(cfg))
+	version, err := git.NewExecCommandFactory(cfg).GitVersion(ctx)
 	require.NoError(t, err)
 	return version.FlushesUpdaterefStatus()
 }
