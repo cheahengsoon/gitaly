@@ -471,6 +471,9 @@ message CreateForkResponse {}
 message CreateRepositoryFromURLRequest {
   Repository repository = 1 [(target_repository)=true];
   string url = 2;
+  // http_authorization_header is the HTTP header which should be added to
+  // the request in order to authenticate against the repository.
+  string http_authorization_header = 3;
 }
 
 message CreateRepositoryFromURLResponse {}
