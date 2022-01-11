@@ -39,11 +39,11 @@ func TestStolenPid(t *testing.T) {
 	require.Equal(t, cmd.Process.Pid, tail.Pid)
 
 	t.Run("stolen", func(t *testing.T) {
-		require.False(t, isGitaly(tail, "/path/to/gitaly"))
+		require.False(t, isExpectedProcess(tail, "/path/to/gitaly"))
 	})
 
 	t.Run("not stolen", func(t *testing.T) {
-		require.True(t, isGitaly(tail, "/path/to/tail"))
+		require.True(t, isExpectedProcess(tail, "/path/to/tail"))
 	})
 }
 
@@ -166,4 +166,26 @@ func TestReadPIDFile(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 12345, pid)
 	})
+}
+
+func TestIsExpectedProcess(t *testing.T) {
+	ctx, cancel := testhelper.Context()
+	defer cancel()
+
+	executable := testhelper.WriteExecutable(t, filepath.Join(testhelper.TempDir(t), "noop"), []byte(
+		`#!/usr/bin/env bash
+		while true
+		do
+			:
+		done
+	`))
+
+	cmd := exec.CommandContext(ctx, executable)
+	require.NoError(t, cmd.Start())
+
+	require.False(t, isExpectedProcess(cmd.Process, "does not match"))
+	require.True(t, isExpectedProcess(cmd.Process, "bash"))
+
+	cancel()
+	require.Error(t, cmd.Wait())
 }
