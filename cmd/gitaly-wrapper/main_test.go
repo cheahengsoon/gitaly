@@ -189,3 +189,33 @@ func TestIsExpectedProcess(t *testing.T) {
 	cancel()
 	require.Error(t, cmd.Wait())
 }
+
+func TestIsProcessAlive(t *testing.T) {
+	ctx, cancel := testhelper.Context()
+	defer cancel()
+
+	executable := testhelper.WriteExecutable(t, filepath.Join(testhelper.TempDir(t), "noop"), []byte(
+		`#!/usr/bin/env bash
+		while true
+		do
+			:
+		done
+	`))
+
+	cmd := exec.CommandContext(ctx, executable)
+	require.NoError(t, cmd.Start())
+	require.True(t, isProcessAlive(cmd.Process))
+
+	// The process will be considered alive as long as it hasn't been reaped yet.
+	require.NoError(t, cmd.Process.Kill())
+	require.True(t, isProcessAlive(cmd.Process))
+
+	require.Error(t, cmd.Wait())
+	require.False(t, isProcessAlive(cmd.Process))
+
+	// And now let's check with a nonexistent process. FindProcess never returns an error on
+	// Unix systems even if the process doesn't exist, so this is fine.
+	process, err := os.FindProcess(77777777)
+	require.NoError(t, err)
+	require.False(t, isProcessAlive(process))
+}
