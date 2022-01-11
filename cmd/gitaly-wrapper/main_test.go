@@ -33,7 +33,7 @@ func TestStolenPid(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, pidFile.Close())
 
-	tail, err := findGitaly(pidFile.Name())
+	tail, err := findProcess(pidFile.Name())
 	require.NoError(t, err)
 	require.NotNil(t, tail)
 	require.Equal(t, cmd.Process.Pid, tail.Pid)
@@ -44,6 +44,63 @@ func TestStolenPid(t *testing.T) {
 
 	t.Run("not stolen", func(t *testing.T) {
 		require.True(t, isGitaly(tail, "/path/to/tail"))
+	})
+}
+
+func TestFindProcess(t *testing.T) {
+	t.Run("nonexistent PID file", func(t *testing.T) {
+		_, err := findProcess("does-not-exist")
+		require.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("PID file with garbage", func(t *testing.T) {
+		path := filepath.Join(testhelper.TempDir(t), "pid")
+		require.NoError(t, os.WriteFile(path, []byte("garbage"), 0o644))
+
+		_, err := findProcess(path)
+		_, expectedErr := strconv.Atoi("garbage")
+		require.Equal(t, expectedErr, err)
+	})
+
+	t.Run("nonexistent process", func(t *testing.T) {
+		// The below PID can exist, but chances are sufficiently low to hopefully not matter
+		// in practice.
+		path := filepath.Join(testhelper.TempDir(t), "pid")
+		require.NoError(t, os.WriteFile(path, []byte("7777777"), 0o644))
+
+		// The process isn't alive, so we expect neither an error nor a process to be
+		// returned.
+		process, err := findProcess(path)
+		require.Nil(t, process)
+		require.Nil(t, err)
+	})
+
+	t.Run("running process", func(t *testing.T) {
+		ctx, cancel := testhelper.Context()
+		defer cancel()
+
+		executable := testhelper.WriteExecutable(t, filepath.Join(testhelper.TempDir(t), "noop"), []byte(
+			`#!/usr/bin/env bash
+			while true
+			do
+				:
+			done
+		`))
+
+		cmd := exec.CommandContext(ctx, executable)
+		require.NoError(t, cmd.Start())
+		defer func() {
+			cancel()
+			require.Error(t, cmd.Wait())
+		}()
+
+		path := filepath.Join(testhelper.TempDir(t), "pid")
+		require.NoError(t, os.WriteFile(path, []byte(strconv.FormatInt(int64(cmd.Process.Pid), 10)), 0o644))
+
+		process, err := findProcess(path)
+		require.NotNil(t, process)
+		require.Equal(t, cmd.Process.Pid, process.Pid)
+		require.Equal(t, nil, err)
 	})
 }
 
