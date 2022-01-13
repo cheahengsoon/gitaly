@@ -38,21 +38,21 @@ func fatalf(format string, args ...interface{}) {
 func main() {
 	flags := flag.NewFlagSet(git2go.BinaryName, flag.ExitOnError)
 
-	if err := flags.Parse(os.Args); err != nil {
+	if err := flags.Parse(os.Args[1:]); err != nil {
 		fatalf("parsing flags: %s", err)
 	}
 
-	if flags.NArg() < 2 {
+	if flags.NArg() < 1 {
 		fatalf("missing subcommand")
 	}
 
-	subcmd, ok := subcommands[flags.Arg(1)]
+	subcmd, ok := subcommands[flags.Arg(0)]
 	if !ok {
 		fatalf("unknown subcommand: %q", flags.Arg(1))
 	}
 
 	subcmdFlags := subcmd.Flags()
-	if err := subcmdFlags.Parse(flags.Args()[2:]); err != nil {
+	if err := subcmdFlags.Parse(flags.Args()[1:]); err != nil {
 		fatalf("parsing flags of %q: %s", subcmdFlags.Name(), err)
 	}
 
