@@ -15,7 +15,7 @@ import (
 
 type subcmd interface {
 	Flags() *flag.FlagSet
-	Run(ctx context.Context, in *gob.Decoder, out *gob.Encoder) error
+	Run(ctx context.Context, decoder *gob.Decoder, encoder *gob.Encoder) error
 }
 
 var subcommands = map[string]subcmd{
@@ -30,40 +30,42 @@ var subcommands = map[string]subcmd{
 	"submodule":   &submoduleSubcommand{},
 }
 
-func fatalf(format string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
+func fatalf(encoder *gob.Encoder, format string, args ...interface{}) {
+	encoder.Encode(git2go.Result{
+		Error: git2go.SerializableError(fmt.Errorf(format, args...)),
+	})
 	os.Exit(1)
 }
 
 func main() {
 	flags := flag.NewFlagSet(git2go.BinaryName, flag.ExitOnError)
 
+	decoder := gob.NewDecoder(os.Stdin)
+	encoder := gob.NewEncoder(os.Stdout)
+
 	if err := flags.Parse(os.Args[1:]); err != nil {
-		fatalf("parsing flags: %s", err)
+		fatalf(encoder, "parsing flags: %s", err)
 	}
 
 	if flags.NArg() < 1 {
-		fatalf("missing subcommand")
+		fatalf(encoder, "missing subcommand")
 	}
 
 	subcmd, ok := subcommands[flags.Arg(0)]
 	if !ok {
-		fatalf("unknown subcommand: %q", flags.Arg(1))
+		fatalf(encoder, "unknown subcommand: %q", flags.Arg(1))
 	}
 
 	subcmdFlags := subcmd.Flags()
 	if err := subcmdFlags.Parse(flags.Args()[1:]); err != nil {
-		fatalf("parsing flags of %q: %s", subcmdFlags.Name(), err)
+		fatalf(encoder, "parsing flags of %q: %s", subcmdFlags.Name(), err)
 	}
 
 	if subcmdFlags.NArg() != 0 {
-		fatalf("%s: trailing arguments", subcmdFlags.Name())
+		fatalf(encoder, "%s: trailing arguments", subcmdFlags.Name())
 	}
 
-	in := gob.NewDecoder(os.Stdin)
-	out := gob.NewEncoder(os.Stdout)
-
-	if err := subcmd.Run(context.Background(), in, out); err != nil {
-		fatalf("%s: %s", subcmdFlags.Name(), err)
+	if err := subcmd.Run(context.Background(), decoder, encoder); err != nil {
+		fatalf(encoder, "%s: %s", subcmdFlags.Name(), err)
 	}
 }
