@@ -162,8 +162,8 @@ test:
     # by just looking at its own GIT_PREFIX and then pick binaries from that
     # installation directory.
     - if test -n "${WITH_BUNDLED_GIT}"; then rm -rf _build/deps/git/install; fi
-    # We need to prepare tests as privileged user.
-    - make prepare-tests
+    # We need to prepare test dependencies as privileged user.
+    - make build prepare-tests
     # But the actual tests should run unprivileged. This assures that we pay
     # proper attention to permission bits and that we don't modify the source
     # directory.
