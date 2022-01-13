@@ -5,9 +5,9 @@ package main
 
 import (
 	"context"
+	"encoding/gob"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 
 	"gitlab.com/gitlab-org/gitaly/v14/internal/git2go"
@@ -15,7 +15,7 @@ import (
 
 type subcmd interface {
 	Flags() *flag.FlagSet
-	Run(ctx context.Context, stdin io.Reader, stdout io.Writer) error
+	Run(ctx context.Context, in *gob.Decoder, out *gob.Encoder) error
 }
 
 var subcommands = map[string]subcmd{
@@ -60,7 +60,10 @@ func main() {
 		fatalf("%s: trailing arguments", subcmdFlags.Name())
 	}
 
-	if err := subcmd.Run(context.Background(), os.Stdin, os.Stdout); err != nil {
+	in := gob.NewDecoder(os.Stdin)
+	out := gob.NewEncoder(os.Stdout)
+
+	if err := subcmd.Run(context.Background(), in, out); err != nil {
 		fatalf("%s: %s", subcmdFlags.Name(), err)
 	}
 }
